@@ -7,7 +7,20 @@ from geopathfinder.naming_conventions.yeoda_naming import YeodaFilename
 import rasterio
 
 
-def load_layers(eo_df, group_fields=None, qml_path=None):
+def load_layers(eo_df, group_fields=None, qml_field=None):
+    """
+    Load, group and style QGIS layers based on a DataFrame containing details of raster files.
+
+    Parameters
+    ----------
+    eo_df: pd.DataFrame
+        DataFrame containing details of raster files including a "filepaths" column.
+    group_fields: list, optional
+        List of columns to be used to group the layers within the QGIS project (default: None).
+    qml_field: str, optional
+        Name of the column which includes the path to the QML file to be applied as style (default: None).
+    """
+
     dt_format = '%Y-%m-%d'
     eo_df['day'] = eo_df['datetime_1'].dt.strftime(dt_format)
     group_dict = dict()
@@ -50,6 +63,12 @@ def load_layers(eo_df, group_fields=None, qml_path=None):
             time_range = QgsDateTimeRange(dt1, dt2)
             rlayer.temporalProperties().setFixedTemporalRange(time_range)
             rlayer.temporalProperties().setIsActive(True)
+
+            # apply style sheet
+            if qml_field is not None:
+                qml_path = eo_file[qml_field]
+                rlayer.loadNamedStyle(qml_path.as_posix())
+                rlayer.triggerRepaint()
             
             # move layer to group
             rlyr_node = root.findLayer(rlayer.id())
@@ -57,22 +76,17 @@ def load_layers(eo_df, group_fields=None, qml_path=None):
             parent_lyr = rlyr_node.parent()
             child_group.insertChildNode(0, clone_lyr)
             parent_lyr.removeChildNode(rlyr_node)
-            
-            # apply style sheet
-            if qml_path is not None:
-                rlayer.loadNamedStyle(qml_path.as_posix())
-                rlayer.triggerRepaint()
         
         # close layer
         rlayer = None
         clone_lyr = None
         parent_lyr = None
 
-        
     print('Layers loaded.')
         
         
 def get_group_name(fname, col, dtf):
+    """Get group name from filename detail."""
     if col == 'day':
         return fname.datetime_1.strftime(dtf)
     else:
@@ -81,7 +95,6 @@ def get_group_name(fname, col, dtf):
     
 def filepaths2dataframe(fpath_list):
     """Puts a list of files into a DataFrame and add the filenaming details as columns."""
-
     parts_list = list()
     for spath in fpath_list:
         fname = YeodaFilename.from_filename(spath.name, convert=True)
@@ -96,6 +109,7 @@ def filepaths2dataframe(fpath_list):
 
 
 def add_metadata_to_dataframe(df, meta_field):
+    """Adds a content of a metadata field to the passed dataframe."""
     meta_values = list()
     for fpath in df['filepaths']:
         with rasterio.open(fpath, 'r') as src:
@@ -110,6 +124,7 @@ def add_metadata_to_dataframe(df, meta_field):
     
     
 def get_eo_dataframe(root_path: Path, grid_name: str, version_list=None, tile_list=None):
+    """Retrieve dataframe based on datacube root path in the Yeoda Filenaming convention."""
     if version_list is None:
         version_list = ['*']
     if tile_list is None:
