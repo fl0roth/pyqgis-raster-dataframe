@@ -1,6 +1,5 @@
 from pathlib import Path
 from qgis.core import QgsRasterLayer, QgsProject, QgsRasterLayerTemporalProperties, QgsDateTimeRange
-from qgis.core import QgsLayerTreeLayer
 from qgis.utils import iface
 from qgis.PyQt.QtCore import QDateTime
 import pandas as pd
@@ -57,15 +56,18 @@ def load_layers(eo_df, group_fields=None, qml_path=None):
                 rlayer.triggerRepaint()
             
             # add time
-            # dt1 = QDateTime.fromString(eo_file.datetime_1.strftime('%y%m%d'), 'yyyyMMdd')
-            # dt2 = dt1.addDays(10)
-            # rlayer.temporalProperties().setMode(QgsRasterLayerTemporalProperties.ModeFixedTemporalRange)
-            # time_range = QgsDateTimeRange(dt1, dt2)
-            # rlayer.temporalProperties().setFixedTemporalRange(time_range)
-            # rlayer.temporalProperties().setIsActive(True)
+            dt1 = QDateTime.fromString(eo_file.datetime_1.strftime('%y%m%d'), 'yyyyMMdd')
+            dt2 = dt1.addDays(10)
+            clone_lyr.temporalProperties().setMode(QgsRasterLayerTemporalProperties.ModeFixedTemporalRange)
+            time_range = QgsDateTimeRange(dt1, dt2)
+            clone_lyr.temporalProperties().setFixedTemporalRange(time_range)
+            clone_lyr.temporalProperties().setIsActive(True)
         
         # close layer
         rlayer = None
+        clone_lyr = None
+        parent_lyr = None
+
         
     print('Layers loaded.')
         
