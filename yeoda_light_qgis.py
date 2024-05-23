@@ -42,6 +42,14 @@ def load_layers(eo_df, group_fields=None, qml_path=None):
                                           "gdal")
             if not rlayer.isValid():
                 print('Layer not valid: ' + eo_file.filepaths.with_suffix('').name)
+
+            # add time properties
+            dt1 = QDateTime.fromString(eo_file.datetime_1.strftime('%y%m%d'), 'yyyyMMdd')
+            dt2 = dt1.addDays(10)
+            rlayer.temporalProperties().setMode(QgsRasterLayerTemporalProperties.ModeFixedTemporalRange)
+            time_range = QgsDateTimeRange(dt1, dt2)
+            rlayer.temporalProperties().setFixedTemporalRange(time_range)
+            rlayer.temporalProperties().setIsActive(True)
             
             # move layer to group
             rlyr_node = root.findLayer(rlayer.id())
@@ -54,14 +62,6 @@ def load_layers(eo_df, group_fields=None, qml_path=None):
             if qml_path is not None:
                 rlayer.loadNamedStyle(qml_path.as_posix())
                 rlayer.triggerRepaint()
-            
-            # add time
-            dt1 = QDateTime.fromString(eo_file.datetime_1.strftime('%y%m%d'), 'yyyyMMdd')
-            dt2 = dt1.addDays(10)
-            clone_lyr.temporalProperties().setMode(QgsRasterLayerTemporalProperties.ModeFixedTemporalRange)
-            time_range = QgsDateTimeRange(dt1, dt2)
-            clone_lyr.temporalProperties().setFixedTemporalRange(time_range)
-            clone_lyr.temporalProperties().setIsActive(True)
         
         # close layer
         rlayer = None
