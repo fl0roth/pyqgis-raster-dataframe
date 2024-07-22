@@ -5,18 +5,14 @@ Script to load, group and style raster layers based on a passed DataFrame in QGI
 This aims for a (processing) plugin in the future!
 
 ## Installation
-Create conda environment with Python 3.9:
+Create "pyqgis" conda environment using the provided YAML file:
 
-    mamba create -n qgis python=3.9
+    mamba env create -f mamba_env.yml
+    conda activate pyqgis
 
-Install `QGIS` and `geopandas` to the environment using mamba:
+Install `pyqgis-raster-dataframe` from source:
 
-    conda activate qgis
-    mamba install -c conda-forge qgis rioxarray
-
-Install `geopathfinder` using pip:
-
-    pip install geopathfinder
+    pip install -e .
 
 ## Usage
 When the installed conda environment is activated, you can start QGIS by running:
@@ -37,3 +33,7 @@ the columns of the DataFrame. Further, a style can be passed and the QGIS tempor
 
 A script, which makes use of the yeoda-light-qgis functionality should be put to the same folder as the 
 load_from_dataframe.py script and is expected to be called within the Python Console of QGIS.
+
+## Note
+This package was create using cookiecutter and the following skeleton: https://github.com/TUW-GEO/cookiecutter-tuw-package
+
