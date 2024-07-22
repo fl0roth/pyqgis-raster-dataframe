@@ -1,5 +1,5 @@
 from pathlib import Path
-from qgis.core import QgsRasterLayer, QgsProject, QgsRasterLayerTemporalProperties, QgsDateTimeRange
+from qgis.core import QgsProject, QgsRasterLayerTemporalProperties, QgsDateTimeRange
 from qgis.utils import iface
 from qgis.PyQt.QtCore import QDateTime
 import pandas as pd
@@ -7,29 +7,33 @@ from geopathfinder.naming_conventions.yeoda_naming import YeodaFilename
 import rasterio
 
 
-def load_layers(eo_df, group_fields=None, qml_field=None):
+def load_layers(raster_df, time_column=None, group_columns=None, qml_column=None):
     """
     Load, group and style QGIS layers based on a DataFrame containing details of raster files.
 
     Parameters
     ----------
-    eo_df: pd.DataFrame
+    raster_df: pd.DataFrame
         DataFrame containing details of raster files including a "filepaths" column.
-    group_fields: list, optional
-        List of columns to be used to group the layers within the QGIS project (default: None).
-    qml_field: str, optional
-        Name of the column which includes the path to the QML file to be applied as style (default: None).
+    time_column: str, optional
+        DataFrame column representing the datetime of a raster file (default: None).
+    group_columns: list, optional
+        List of DataFrame columns to be used to group the layers within the QGIS project (default: None).
+    qml_column: str, optional
+        DataFrame column which includes the path to the QML file to be applied as style (default: None).
     """
-
+    
     dt_format = '%Y-%m-%d'
-    eo_df['day'] = eo_df['datetime_1'].dt.strftime(dt_format)
+    if 'filepaths' not in raster_df.columns:
+        raise Exception("The passed DataFrame needs to contain a column called 'filepaths'.")
+    
     group_dict = dict()
-    for i, eo_file in eo_df.iterrows():
+    for i, raster_details in raster_df.iterrows():
         # create groups based on DataFrame
-        if group_fields is not None:
+        if group_columns is not None:
             root = QgsProject.instance().layerTreeRoot()
-            for i, col in enumerate(group_fields):
-                gn = get_group_name(eo_file, col, dt_format)
+            for i, col in enumerate(group_columns):
+                gn = get_group_name(raster_details, col, dt_format)
                 
                 if i == 0:
                     if gn not in group_dict:
@@ -38,8 +42,8 @@ def load_layers(eo_df, group_fields=None, qml_field=None):
                     else:
                         child_group = group_dict[gn]
                 else:
-                    prev_cols = group_fields[:i]
-                    prev_groups = [get_group_name(eo_file, c, dt_format) for c in prev_cols]
+                    prev_cols = group_columns[:i]
+                    prev_groups = [get_group_name(raster_details, c, dt_format) for c in prev_cols]
                     parent_key = "/".join(prev_groups)
                     child_key = parent_key + "/" + gn
                     if child_key not in group_dict:
@@ -49,24 +53,26 @@ def load_layers(eo_df, group_fields=None, qml_field=None):
                         child_group = group_dict[child_key]
                     
             # create QGIS layer
-            if not eo_file.filepaths.exists():
-                raise FileNotFoundError("File " + eo_file.name + " does not exist.")
-            rlayer = iface.addRasterLayer(eo_file.filepaths.as_posix(), eo_file.filepaths.with_suffix('').name,
+            if not raster_details.filepaths.exists():
+                raise FileNotFoundError("File " + raster_details.name + " does not exist.")
+            rlayer = iface.addRasterLayer(raster_details.filepaths.as_posix(), raster_details.filepaths.with_suffix('').name,
                                           "gdal")
             if not rlayer.isValid():
-                print('Layer not valid: ' + eo_file.filepaths.with_suffix('').name)
+                print('Layer not valid: ' + raster_details.filepaths.with_suffix('').name)
 
             # add time properties
-            dt1 = QDateTime.fromString(eo_file.datetime_1.strftime('%y%m%d'), 'yyyyMMdd')
-            dt2 = dt1.addDays(10)
-            rlayer.temporalProperties().setMode(QgsRasterLayerTemporalProperties.ModeFixedTemporalRange)
-            time_range = QgsDateTimeRange(dt1, dt2)
-            rlayer.temporalProperties().setFixedTemporalRange(time_range)
-            rlayer.temporalProperties().setIsActive(True)
+            if time_column is not None:
+                raster_df['day'] = raster_df[time_column].dt.strftime(dt_format)
+                dt1 = QDateTime.fromString(raster_details[time_column].strftime('%y%m%d'), 'yyyyMMdd')
+                dt2 = dt1.addDays(10)
+                rlayer.temporalProperties().setMode(QgsRasterLayerTemporalProperties.ModeFixedTemporalRange)
+                time_range = QgsDateTimeRange(dt1, dt2)
+                rlayer.temporalProperties().setFixedTemporalRange(time_range)
+                rlayer.temporalProperties().setIsActive(True)
 
             # apply style sheet
-            if qml_field is not None:
-                qml_path = eo_file[qml_field]
+            if qml_column is not None:
+                qml_path = raster_details[qml_column]
                 rlayer.loadNamedStyle(qml_path.as_posix())
                 rlayer.triggerRepaint()
             
@@ -93,11 +99,26 @@ def get_group_name(fname, col, dtf):
         return fname[col]
         
     
-def filepaths2dataframe(fpath_list):
-    """Puts a list of files into a DataFrame and add the filenaming details as columns."""
+def filepaths2dataframe(fpath_list, filenaming_class):
+    """
+    Puts a list of files into a DataFrame and add the filenaming details as columns.
+    
+    Parameters
+    ----------
+    fpath_list: list
+        List of paths to GeoTiff files as string or pathlib.Path.
+    filenaming_class: geopathfinder.file_naming.SmartFilename
+        Filenaming convention class from geopathfinder.
+        
+    Returns
+    -------
+    df: pd.DataFrame
+        DataFrame containing the path and the filenaming details of the input raster files.
+    """
+    
     parts_list = list()
     for spath in fpath_list:
-        fname = YeodaFilename.from_filename(spath.name, convert=True)
+        fname = filenaming_class.from_filename(spath.name, convert=True)
         fn_parts = vars(fname.obj)
         fn_parts['filepaths'] = spath
         parts_list.append(fn_parts)
@@ -123,7 +144,7 @@ def add_metadata_to_dataframe(df, meta_field):
     return df
     
     
-def get_eo_dataframe(root_path: Path, grid_name: str, version_list=None, tile_list=None):
+def get_yeoda_dataframe(root_path: Path, grid_name: str, version_list=None, tile_list=None):
     """Retrieve dataframe based on datacube root path in the Yeoda Filenaming convention."""
     if version_list is None:
         version_list = ['*']
@@ -136,4 +157,4 @@ def get_eo_dataframe(root_path: Path, grid_name: str, version_list=None, tile_li
             tile_path = root_path / data_version / grid_name / tile
             file_list.extend(list(tile_path.glob('*.tif')))
             
-    return filepaths2dataframe(file_list)
+    return filepaths2dataframe(file_list, filenaming_class=YeodaFilename)
